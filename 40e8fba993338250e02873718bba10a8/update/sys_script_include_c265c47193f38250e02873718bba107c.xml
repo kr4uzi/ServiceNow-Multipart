@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_376096_multipart.Multipart</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>Multipart</name>
+        <script><![CDATA[/* global Class */
+/* global x_376096_multipart */
+/* eslint no-undef: "error" */
+var Multipart = Class.create();
+Multipart.prototype = {
+	initialize: function () {
+		this.httpParser = new x_376096_multipart.HTTPParser();
+		this.supportedSubtypes = [
+			//'alternative', // RFC1521
+			//'byteranges', // RFC2068
+			//'digest', // RFC1521
+			'form-data', // RFC1867
+			//'mixed', // RFC1521
+			//'parallel', // RFC1521
+			//'related', RFC2112
+		];
+	},
+
+	parse: function (config) {
+		const contentType = this.httpParser.parseContentType(config.contentType);
+		const [type, subType] = contentType.type.split('/');
+		if (type == 'multipart') {
+			if (!this.supportedSubtypes.includes(subType)) {
+				throw new Error('Unsupported multipart subtype');
+			}
+			
+			// trailing space are allowed, but need to be deleted
+			const boundaryStr = contentType.parameters.boundary?.trimEnd();
+			if (!boundaryStr) {
+				throw new Error('the boundary parameter is mandatory for multipart');
+			} else if (boundaryStr.length > 70) {
+				throw new Error('the boundary parameter must not be longer than 70 characters');
+			}
+
+			// proceed to the first boundary (anything before that may be ignored)
+			{
+				const boundary = Array.from('--' + boundaryStr + '\r\n').map(c => c.charCodeAt(0));
+				const bytes = [];
+				while (findArray(bytes, boundary, 0) == -1) {
+					const byte = config.stream.read();
+					if (byte == -1) {
+						throw new Error('Unexpected EOF');
+					}
+
+					bytes.push(byte);
+
+					// prevent temporary buffer from growing too large
+					if (bytes.length > (boundary.length * 2)) {
+						bytes.splice(0, boundary.length);
+					}
+				}
+			}
+
+			const parts = [];
+			// after the first boundary, the CRLF proceeding the boundary is not part of the data!
+			// the boundary is then followed by either CRLF (indicating a new part) or -- (indicating EOF)
+			const boundary = Array.from('\r\n--' + boundaryStr).map(c => c.charCodeAt(0));
+			while (true) {
+				let headerStr = '';
+				let byte = -1;
+				while ((byte = config.stream.read()) != -1) {
+					headerStr += String.fromCharCode(byte);
+
+					// each header is separated by CRLF, a empty header line indicates the end of the headers
+					if (headerStr.slice(-4) == '\r\n\r\n') {
+						break;
+					}
+				}
+
+				let partKey = '';
+				let fileName = '';
+				const headers = this.httpParser.parse(headerStr);
+				if ('content-disposition' in headers) {
+					const contentDisposition = this.httpParser.parseContentDisposition(headers['content-disposition']);
+					if ('filename' in contentDisposition.parameters) {
+						fileName = contentDisposition.parameters.filename.trim();
+						if (!fileName) {
+							throw new Error('filename must not be empty if set');
+						}
+					}
+
+					if (subType == 'form-data') {
+						if (contentDisposition.type != 'form-data') {
+							throw new Error('Each part MUST contain a Content-Disposition where the disposition type is "form-data"');
+						}
+						
+						if ('name' in contentDisposition.parameters) {
+							partKey = contentDisposition.parameters.name.trim();
+						}
+
+						if (!partKey) {
+							throw new Error('The Content-Disposition header field MUST also contain an additional parameter of "name"');
+						}
+					}
+				} else if (subType == 'form-data') {
+					throw new Error('content-disposition is mandatory for form-data');
+				}
+
+				const childContentType = (function () {
+					if (subType == 'form-data') {
+						if ('content-type' in headers) {
+							return this.httpParser.parseContentType(headers['content-type']);
+						} else {
+							return this.httpParser.parseContentType('text/plain');
+						}
+					}
+				}).call(this);
+
+				const ostream = getOutputStream.call(this, fileName, contentType, childContentType, config);
+				const bytes = [];
+				while ((byte = config.stream.read()) != -1) {
+					bytes.push(byte);
+					const pos = findArray(bytes, boundary, 0);
+					if (pos != -1) {
+						ostream.writeNBytes(bytes, 0, pos);
+						break;
+					}
+
+					// prevent temporary buffer from growing too large
+					if (bytes.length > (boundary.length * 2)) {
+						ostream.writeNBytes(bytes, 0, boundary.length);
+						bytes.splice(0, boundary.length);
+					}
+				}
+
+				const end = String.fromCharCode(...config.stream.readNBytes(2));
+				if (end == '--') {
+					parts.push({
+						key: partKey,
+						value: getValue(ostream, config)
+					});
+
+					// everything left after this point should be ignored
+					break;
+				} else if (end == '\r\n') {
+					parts.push({
+						key: partKey,
+						value: getValue(ostream, config)
+					});
+
+					// next part can be parsed
+					continue;
+				} else {
+					throw new Error('unexpected EOF');
+				}
+			}
+
+			return parts;
+		} else {
+			const ostream = getOutputStream('', contentType, config);
+			return getValue(ostream, config);
+		}
+
+		function getValue(ostream, config) {
+			ostream.flush();
+
+			if (ostream.type == 'ByteArrayOutputStream') {
+				// ByteArrayOutputStream stream is only used for string values
+				return ostream.toString();
+			} else if (ostream.type == 'AttachmentOutputStream') {
+				return {
+					sys_id: ostream.attachmentSysID(),
+					fileName: ostream.fileName(),
+					contentType: ostream.contentType()
+				};
+			} else if (ostream.type == 'FileOutputStream') {
+				return {
+					content: ostream.toBase64(),
+					fileName: ostream.fileName(),
+					contentType: ostream.contentType()
+				};
+			} else if (ostream.type == 'NestedMultipartStream') {
+				return ostream.data();
+			} else {
+				throw new Error('Unknown OutputStream type');
+			}
+		}
+
+		function getOutputStream(fileName, parentContentType, childContentType, config) {
+			if (fileName) {
+				if (config.fileOutput == 'base64') {
+					return new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
+				} else if (config.fileOutput == 'attachment') {
+					return new x_376096_multipart.AttachmentOutputStream(fileName, childContentType.type);
+				} else {
+					throw new Error('Invalid fileOutput config');
+				}
+			}
+
+			const [parentType, parentSubType] = childContentType.type.split('/');
+			const [childType, childSubType] = childContentType.type.split('/');
+			if (childType == 'multipart' && (parentType == 'multipart' || (parentSubType != childSubType))) {
+				return x_376096_multipart.NestedMultipartStream(this, {
+					fileOutput: config.fileOutput,
+					contentType: contentType
+				});
+			}
+			
+			return new x_376096_multipart.ByteArrayOutputStream();
+		}
+
+		function findArray(master, sub, masterStart) {
+			if (sub.length > master.length) {
+				return -1;
+			}
+			
+			masterStart = masterStart || 0;
+			const masterEnd = master.length - sub.length;
+			for (let i = master.indexOf(sub[0], masterStart); i != -1 && i <= masterEnd; i++) {
+				let j = 0;
+				for (; j < sub.length; j++) {
+					if (master[i + j] != sub[j]) {
+						break;
+					}
+				}
+
+				if (j == sub.length) {
+					return i;
+				}
+
+				masterStart = i + 1;
+			}
+
+			return -1;
+		}
+	},
+
+	type: 'Multipart'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-04 01:20:34</sys_created_on>
+        <sys_id>c265c47193f38250e02873718bba107c</sys_id>
+        <sys_mod_count>14</sys_mod_count>
+        <sys_name>Multipart</sys_name>
+        <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
+        <sys_update_name>sys_script_include_c265c47193f38250e02873718bba107c</sys_update_name>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-04 08:26:37</sys_updated_on>
+    </sys_script_include>
+</record_update>

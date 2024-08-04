@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_376096_multipart.InputStream</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>InputStream</name>
+        <script><![CDATA[/* global Class, Uint8Array */
+/* eslint no-undef: "error" */
+var InputStream = Class.create();
+InputStream.prototype = {
+	initialize: function() {
+
+	},
+
+	/**
+	 * Returns an estimate of the number of bytes that can be read (or skipped over) from this input stream without blocking, which may be 0, or 0 when end of stream is detected.
+	 * @return {number} an estimate of the number of bytes that can be read (or skipped over) from this input stream without blocking or 0 when it reaches the end of the input stream.
+	 */
+	available: function() {
+		return 0;
+	},
+
+	/**
+	 * Closes this input stream and releases any system resources associated with the stream.
+	 */
+	close: function() {
+
+	},
+
+	/**
+	 * Marks the current position in this input stream.
+	 * @param {number} readlimit - the maximum limit of bytes that can be read before the mark position becomes invalid.
+	 */
+	mark: function(readlimit) {
+
+	},
+
+	/**
+	 * Tests if this input stream supports the mark and reset methods.
+	 * @return {boolean} true if this stream instance supports the mark and reset methods; false otherwise.
+	 */
+	markSupported: function() {
+		return false;
+	},
+
+	/**
+	 * Reads the next byte of data from the input stream.
+	 * @return {number} the next byte of data, or -1 if the end of the stream is reached.
+	 */
+	read: function() {
+		return -1;
+	},
+
+	/**
+	 * Reads all remaining bytes from the input stream.
+	 * @return {Uint8Array} a byte array containing the bytes read from this input stream
+	 */
+	readAllBytes: function() {
+		const bytes = [];
+		let b = -1;
+		while ((b = this.read()) != -1) {
+			bytes.push(b);
+		}
+
+		return new Uint8Array(bytes);
+	},
+
+	/**
+	 * Reads up to a specified number of bytes from the input stream.
+	 * @param {number} len - the maximum number of bytes to read
+	 * @return {Uint8Array} a byte array containing the bytes read from this input stream
+	 */
+	readNBytes: function(len) {
+		const bytes = [];
+		let b = -1;
+		while (len-- && (b = this.read()) != -1) {
+			bytes.push(b);
+		}
+
+		return new Uint8Array(bytes);
+	},
+
+	/**
+	 * Repositions this stream to the position at the time the mark method was last called on this input stream.
+	 */
+	reset: function() {
+
+	},
+
+	/**
+	 * Skips over and discards n bytes of data from this input stream.
+	 * @param {number} n - the number of bytes to be skipped.
+	 * @return {number} the actual number of bytes skipped
+	 */
+	skip: function(n) {
+		return 0;
+	},
+
+	/**
+	 * Reads all bytes from this input stream and writes the bytes to the given output stream in the order that they are read.
+	 * @param {OutputStream} out - the output stream, non-null
+	 * @return {number} the number of bytes transferred
+	 */
+	transferTo: function(out) {
+		const bytes = this.readAllBytes();
+		out.writeBytes(bytes);
+		return bytes.length;
+	},
+
+	type: 'InputStream'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-04 00:25:08</sys_created_on>
+        <sys_id>fca9b36593738250e02873718bba10c5</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>InputStream</sys_name>
+        <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
+        <sys_update_name>sys_script_include_fca9b36593738250e02873718bba10c5</sys_update_name>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-04 01:15:30</sys_updated_on>
+    </sys_script_include>
+</record_update>

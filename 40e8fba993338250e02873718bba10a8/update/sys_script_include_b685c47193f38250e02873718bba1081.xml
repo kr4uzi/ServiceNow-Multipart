@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_376096_multipart.HTTPParser</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>HTTPParser</name>
+        <script><![CDATA[/* global Class, Map */
+/* eslint no-undef: "error" */
+var HTTPParser = Class.create();
+HTTPParser.prototype = {
+	initialize: function () {
+
+	},
+
+	parseContentDisposition: function (string) {
+		var ENCODE_URL_ATTR_CHAR_REGEXP = /[\x00-\x20"'()*,/:;<=>?@[\\\]{}\x7f]/g; // eslint-disable-line no-control-regex
+
+		/**
+		 * RegExp to match percent encoding escape.
+		 * @private
+		 */
+
+		var HEX_ESCAPE_REGEXP = /%[0-9A-Fa-f]{2}/;
+		var HEX_ESCAPE_REPLACE_REGEXP = /%([0-9A-Fa-f]{2})/g;
+
+		/**
+		 * RegExp to match non-latin1 characters.
+		 * @private
+		 */
+
+		var NON_LATIN1_REGEXP = /[^\x20-\x7e\xa0-\xff]/g;
+
+		/**
+		 * RegExp to match quoted-pair in RFC 2616
+		 *
+		 * quoted-pair = "\" CHAR
+		 * CHAR        = <any US-ASCII character (octets 0 - 127)>
+		 * @private
+		 */
+
+		var QESC_REGEXP = /\\([\u0000-\u007f])/g; // eslint-disable-line no-control-regex
+
+		/**
+		 * RegExp to match chars that must be quoted-pair in RFC 2616
+		 * @private
+		 */
+
+		var QUOTE_REGEXP = /([\\"])/g;
+
+		/**
+		 * RegExp for various RFC 2616 grammar
+		 *
+		 * parameter     = token "=" ( token | quoted-string )
+		 * token         = 1*<any CHAR except CTLs or separators>
+		 * separators    = "(" | ")" | "<" | ">" | "@"
+		 *               | "," | ";" | ":" | "\" | <">
+		 *               | "/" | "[" | "]" | "?" | "="
+		 *               | "{" | "}" | SP | HT
+		 * quoted-string = ( <"> *(qdtext | quoted-pair ) <"> )
+		 * qdtext        = <any TEXT except <">>
+		 * quoted-pair   = "\" CHAR
+		 * CHAR          = <any US-ASCII character (octets 0 - 127)>
+		 * TEXT          = <any OCTET except CTLs, but including LWS>
+		 * LWS           = [CRLF] 1*( SP | HT )
+		 * CRLF          = CR LF
+		 * CR            = <US-ASCII CR, carriage return (13)>
+		 * LF            = <US-ASCII LF, linefeed (10)>
+		 * SP            = <US-ASCII SP, space (32)>
+		 * HT            = <US-ASCII HT, horizontal-tab (9)>
+		 * CTL           = <any US-ASCII control character (octets 0 - 31) and DEL (127)>
+		 * OCTET         = <any 8-bit sequence of data>
+		 * @private
+		 */
+
+		var PARAM_REGEXP = /;[\x09\x20]*([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*=[\x09\x20]*("(?:[\x20!\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\x20-\x7e])*"|[!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*/g; // eslint-disable-line no-control-regex
+		var TEXT_REGEXP = /^[\x20-\x7e\x80-\xff]+$/;
+		var TOKEN_REGEXP = /^[!#$%&'*+.0-9A-Z^_`a-z|~-]+$/;
+
+		/**
+		 * RegExp for various RFC 5987 grammar
+		 *
+		 * ext-value     = charset  "'" [ language ] "'" value-chars
+		 * charset       = "UTF-8" / "ISO-8859-1" / mime-charset
+		 * mime-charset  = 1*mime-charsetc
+		 * mime-charsetc = ALPHA / DIGIT
+		 *               / "!" / "#" / "$" / "%" / "&"
+		 *               / "+" / "-" / "^" / "_" / "`"
+		 *               / "{" / "}" / "~"
+		 * language      = ( 2*3ALPHA [ extlang ] )
+		 *               / 4ALPHA
+		 *               / 5*8ALPHA
+		 * extlang       = *3( "-" 3ALPHA )
+		 * value-chars   = *( pct-encoded / attr-char )
+		 * pct-encoded   = "%" HEXDIG HEXDIG
+		 * attr-char     = ALPHA / DIGIT
+		 *               / "!" / "#" / "$" / "&" / "+" / "-" / "."
+		 *               / "^" / "_" / "`" / "|" / "~"
+		 * @private
+		 */
+
+		var EXT_VALUE_REGEXP = /^([A-Za-z0-9!#$%&+\-^_`{}~]+)'(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8}|)'((?:%[0-9A-Fa-f]{2}|[A-Za-z0-9!#$&+.^_`|~-])+)$/;
+
+		/**
+		 * RegExp for various RFC 6266 grammar
+		 *
+		 * disposition-type = "inline" | "attachment" | disp-ext-type
+		 * disp-ext-type    = token
+		 * disposition-parm = filename-parm | disp-ext-parm
+		 * filename-parm    = "filename" "=" value
+		 *                  | "filename*" "=" ext-value
+		 * disp-ext-parm    = token "=" value
+		 *                  | ext-token "=" ext-value
+		 * ext-token        = <the characters in token, followed by "*">
+		 * @private
+		 */
+
+		var DISPOSITION_TYPE_REGEXP = /^([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*(?:$|;)/; // eslint-disable-line no-control-regex
+
+		if (!string || typeof string !== 'string') {
+			throw new TypeError('argument string is required');
+		}
+
+		var match = DISPOSITION_TYPE_REGEXP.exec(string);
+
+		if (!match) {
+			throw new TypeError('invalid type format');
+		}
+
+		// normalize type
+		var index = match[0].length;
+		var type = match[1].toLowerCase();
+
+		var key;
+		var names = [];
+		var params = {};
+		var value;
+
+		// calculate index to start at
+		index = PARAM_REGEXP.lastIndex = match[0].substr(-1) === ';'
+			? index - 1
+			: index;
+
+		// match parameters
+		while ((match = PARAM_REGEXP.exec(string))) {
+			if (match.index !== index) {
+				throw new TypeError('invalid parameter format');
+			}
+
+			index += match[0].length;
+			key = match[1].toLowerCase();
+			value = match[2];
+
+			if (names.indexOf(key) !== -1) {
+				throw new TypeError('invalid duplicate parameter');
+			}
+
+			names.push(key);
+
+			if (key.indexOf('*') + 1 === key.length) {
+				// decode extended value
+				key = key.slice(0, -1);
+				value = decodefield(value);
+
+				// overwrite existing value
+				params[key] = value;
+				continue;
+			}
+
+			if (typeof params[key] === 'string') {
+				continue;
+			}
+
+			if (value[0] === '"') {
+				// remove quotes and escapes
+				value = value
+					.substr(1, value.length - 2)
+					.replace(QESC_REGEXP, '$1');
+			}
+
+			params[key] = value;
+		}
+
+		if (index !== -1 && index !== string.length) {
+			throw new TypeError('invalid parameter format');
+		}
+
+		return new ContentDisposition(type, params);
+
+		function ContentDisposition(type, parameters) {
+			this.type = type;
+			this.parameters = parameters;
+		}
+
+		function decodefield(str) {
+
+			var match = EXT_VALUE_REGEXP.exec(str);
+
+			if (!match) {
+				throw new TypeError('invalid extended field value');
+			}
+
+			var charset = match[1].toLowerCase();
+			var encoded = match[2];
+			var value;
+
+			// to binary string
+			var binary = encoded.replace(HEX_ESCAPE_REPLACE_REGEXP, pdecode);
+
+			switch (charset) {
+				case 'iso-8859-1':
+					value = getlatin1(binary);
+					break;
+				case 'utf-8':
+					value = utf8encode(binary);
+					break;
+				default:
+					throw new TypeError('unsupported charset in extended field');
+			}
+
+			return value;
+			function pdecode(str, hex) {
+				return String.fromCharCode(parseInt(hex, 16));
+			}
+		}
+
+		function getlatin1(val) {
+			// simple Unicode -> ISO-8859-1 transformation
+			return String(val).replace(NON_LATIN1_REGEXP, '?');
+		}
+
+		// https://github.com/mathiasbynens/utf8.js
+		// Copyright Mathias Bynens <https://mathiasbynens.be/>
+		// MIT Licensed
+		function utf8encode(string) {
+			var codePoints = ucs2decode(string);
+			var length = codePoints.length;
+			var index = -1;
+			var codePoint;
+			var byteString = '';
+			while (++index < length) {
+				codePoint = codePoints[index];
+				byteString += encodeCodePoint(codePoint);
+			}
+			return byteString;
+		}
+
+		// Taken from https://mths.be/punycode
+		function ucs2decode(string) {
+			var output = [];
+			var counter = 0;
+			var length = string.length;
+			var value;
+			var extra;
+			while (counter < length) {
+				value = string.charCodeAt(counter++);
+				if (value >= 0xD800 && value <= 0xDBFF && counter < length) {
+					// high surrogate, and there is a next character
+					extra = string.charCodeAt(counter++);
+					if ((extra & 0xFC00) == 0xDC00) { // low surrogate
+						output.push(((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000);
+					} else {
+						// unmatched surrogate; only append this code unit, in case the next
+						// code unit is the high surrogate of a surrogate pair
+						output.push(value);
+						counter--;
+					}
+				} else {
+					output.push(value);
+				}
+			}
+			return output;
+		}
+
+		function encodeCodePoint(codePoint) {
+			if ((codePoint & 0xFFFFFF80) == 0) { // 1-byte sequence
+				return String.fromCharCode(codePoint);
+			}
+			var symbol = '';
+			if ((codePoint & 0xFFFFF800) == 0) { // 2-byte sequence
+				symbol = String.fromCharCode(((codePoint >> 6) & 0x1F) | 0xC0);
+			}
+			else if ((codePoint & 0xFFFF0000) == 0) { // 3-byte sequence
+				checkScalarValue(codePoint);
+				symbol = String.fromCharCode(((codePoint >> 12) & 0x0F) | 0xE0);
+				symbol += createByte(codePoint, 6);
+			}
+			else if ((codePoint & 0xFFE00000) == 0) { // 4-byte sequence
+				symbol = String.fromCharCode(((codePoint >> 18) & 0x07) | 0xF0);
+				symbol += createByte(codePoint, 12);
+				symbol += createByte(codePoint, 6);
+			}
+			symbol += String.fromCharCode((codePoint & 0x3F) | 0x80);
+			return symbol;
+		}
+
+		function checkScalarValue(codePoint) {
+			if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
+				throw Error(
+					'Lone surrogate U+' + codePoint.toString(16).toUpperCase() +
+					' is not a scalar value'
+				);
+			}
+		}
+
+		function createByte(codePoint, shift) {
+			return String.fromCharCode(((codePoint >> shift) & 0x3F) | 0x80);
+		}
+	},
+
+	// https://www.npmjs.com/package/content-type
+	/*!
+	* content-type
+	* Copyright(c) 2015 Douglas Christopher Wilson
+	* MIT Licensed
+	*/
+	parseContentType: function (string) {
+		/**
+		 * RegExp to match *( ";" parameter ) in RFC 7231 sec 3.1.1.1
+		 *
+		 * parameter     = token "=" ( token / quoted-string )
+		 * token         = 1*tchar
+		 * tchar         = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+		 *               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+		 *               / DIGIT / ALPHA
+		 *               ; any VCHAR, except delimiters
+		 * quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+		 * qdtext        = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
+		 * obs-text      = %x80-FF
+		 * quoted-pair   = "\" ( HTAB / SP / VCHAR / obs-text )
+		 */
+		var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g; // eslint-disable-line no-control-regex
+		var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/; // eslint-disable-line no-control-regex
+		var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+		/**
+		 * RegExp to match quoted-pair in RFC 7230 sec 3.2.6
+		 *
+		 * quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )
+		 * obs-text    = %x80-FF
+		 */
+		var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g; // eslint-disable-line no-control-regex
+
+		/**
+		 * RegExp to match chars that must be quoted-pair in RFC 7230 sec 3.2.6
+		 */
+		var QUOTE_REGEXP = /([\\"])/g;
+
+		/**
+		 * RegExp to match type in RFC 7231 sec 3.1.1.1
+		 *
+		 * media-type = type "/" subtype
+		 * type       = token
+		 * subtype    = token
+		 */
+		var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+		if (!string) {
+			throw new TypeError('argument string is required');
+		}
+
+		// support req/res-like objects as argument
+		var header = typeof string === 'object'
+			? getcontenttype(string)
+			: string;
+
+		if (typeof header !== 'string') {
+			throw new TypeError('argument string is required to be a string');
+		}
+
+		var index = header.indexOf(';');
+		var type = index !== -1
+			? header.slice(0, index).trim()
+			: header.trim();
+
+		if (!TYPE_REGEXP.test(type)) {
+			throw new TypeError('invalid media type');
+		}
+
+		var obj = new ContentType(type.toLowerCase());
+
+		// parse parameters
+		if (index !== -1) {
+			var key;
+			var match;
+			var value;
+
+			PARAM_REGEXP.lastIndex = index;
+
+			while ((match = PARAM_REGEXP.exec(header))) {
+				if (match.index !== index) {
+					throw new TypeError('invalid parameter format');
+				}
+
+				index += match[0].length;
+				key = match[1].toLowerCase();
+				value = match[2];
+
+				if (value.charCodeAt(0) === 0x22 /* " */) {
+					// remove quotes
+					value = value.slice(1, -1);
+
+					// remove escapes
+					if (value.indexOf('\\') !== -1) {
+						value = value.replace(QESC_REGEXP, '$1');
+					}
+				}
+
+				obj.parameters[key] = value;
+			}
+
+			if (index !== header.length) {
+				throw new TypeError('invalid parameter format');
+			}
+		}
+
+		return obj;
+
+		function getcontenttype(obj) {
+			var header;
+
+			if (typeof obj.getHeader === 'function') {
+				// res-like
+				header = obj.getHeader('content-type');
+			} else if (typeof obj.headers === 'object') {
+				// req-like
+				header = obj.headers && obj.headers['content-type'];
+			}
+
+			if (typeof header !== 'string') {
+				throw new TypeError('content-type header is missing from object');
+			}
+
+			return header;
+		}
+
+		function ContentType(type) {
+			this.parameters = Object.create(null);
+			this.type = type;
+		}
+	},
+
+	// https://github.com/watson/http-headers
+	/*
+	The MIT License (MIT)
+	
+	Copyright (c) 2014-2017 Thomas Watson Steen
+	
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+	
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+	
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.*/
+	parse: function (data, onlyHeaders) {
+		// RFC-2068 Start-Line definitions:
+		//   Request-Line: Method SP Request-URI SP HTTP-Version CRLF
+		//   Status-Line:  HTTP-Version SP Status-Code SP Reason-Phrase CRLF
+		var startLine = /^[A-Z_]+(\/\d\.\d)? /;
+		var requestLine = /^([A-Z_]+) (.+) [A-Z]+\/(\d)\.(\d)$/;
+		var statusLine = /^[A-Z]+\/(\d)\.(\d) (\d{3}) (.*)$/;
+		return parse(normalize(data), onlyHeaders);
+
+		function parse(str, onlyHeaders) {
+			var line = firstLine(str);
+			var match;
+
+			if (onlyHeaders && startLine.test(line)) {
+				return parseHeaders(str);
+			} else if ((match = line.match(requestLine)) !== null) {
+				return {
+					method: match[1],
+					url: match[2],
+					version: { major: parseInt(match[3], 10), minor: parseInt(match[4], 10) },
+					headers: parseHeaders(str)
+				};
+			} else if ((match = line.match(statusLine)) !== null) {
+				return {
+					version: { major: parseInt(match[1], 10), minor: parseInt(match[2], 10) },
+					statusCode: parseInt(match[3], 10),
+					statusMessage: match[4],
+					headers: parseHeaders(str)
+				};
+			} else {
+				return parseHeaders(str);
+			}
+		}
+
+		function parseHeaders(str) {
+			var headers = {};
+			var next = nextLine(str);
+			var line = next();
+			var index, name, value;
+
+			if (startLine.test(line)) line = next();
+
+			while (line) {
+				// subsequent lines in multi-line headers start with whitespace
+				if (line[0] === ' ' || line[0] === '\t') {
+					value += ' ' + line.trim();
+					line = next();
+					continue;
+				}
+
+				if (name) addHeaderLine(name, value, headers);
+
+				index = line.indexOf(':');
+				name = line.substr(0, index);
+				value = line.substr(index + 1).trim();
+
+				line = next();
+			}
+
+			if (name) addHeaderLine(name, value, headers);
+
+			return headers;
+		}
+
+		function normalize(str) {
+			if (str && str._header) str = str._header; // extra headers from http.ServerResponse object
+			if (!str || typeof str.toString !== 'function') return '';
+			return str.toString().trim();
+		}
+
+		function firstLine(str) {
+			var nl = str.indexOf('\r\n');
+			if (nl === -1) return str;
+			else return str.slice(0, nl);
+		}
+
+		// The following function is lifted from:
+		// https://github.com/nodejs/node/blob/f1294f5bfd7f02bce8029818be9c92de59749137/lib/_http_incoming.js#L116-L170
+		//
+		// Add the given (field, value) pair to the message
+		//
+		// Per RFC2616, section 4.2 it is acceptable to join multiple instances of the
+		// same header with a ', ' if the header in question supports specification of
+		// multiple values this way. If not, we declare the first instance the winner
+		// and drop the second. Extended header fields (those beginning with 'x-') are
+		// always joined.
+		function addHeaderLine(field, value, dest) {
+			field = field.toLowerCase();
+			switch (field) {
+				// Array headers:
+				case 'set-cookie':
+					if (dest[field] !== undefined) {
+						dest[field].push(value);
+					} else {
+						dest[field] = [value];
+					}
+					break;
+
+				// list is taken from:
+				// https://mxr.mozilla.org/mozilla/source/netwerk/protocol/http/src/nsHttpHeaderArray.cpp
+				case 'content-type':
+				case 'content-length':
+				case 'user-agent':
+				case 'referer':
+				case 'host':
+				case 'authorization':
+				case 'proxy-authorization':
+				case 'if-modified-since':
+				case 'if-unmodified-since':
+				case 'from':
+				case 'location':
+				case 'max-forwards':
+				case 'retry-after':
+				case 'etag':
+				case 'last-modified':
+				case 'server':
+				case 'age':
+				case 'expires':
+					// drop duplicates
+					if (dest[field] === undefined) dest[field] = value;
+					break;
+
+				default:
+					// make comma-separated list
+					if (typeof dest[field] === 'string') {
+						dest[field] += ', ' + value;
+					} else {
+						dest[field] = value;
+					}
+			}
+		}
+
+		// https://github.com/watson/next-line
+		/*	The MIT License (MIT)
+		
+		Copyright (c) 2015 Thomas Watson Steen
+		
+		Permission is hereby granted, free of charge, to any person obtaining a copy
+		of this software and associated documentation files (the "Software"), to deal
+		in the Software without restriction, including without limitation the rights
+		to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+		copies of the Software, and to permit persons to whom the Software is
+		furnished to do so, subject to the following conditions:
+		
+		The above copyright notice and this permission notice shall be included in all
+		copies or substantial portions of the Software.
+		
+		THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+		IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+		FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+		AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+		LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+		OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+		SOFTWARE. */
+		function nextLine(str) {
+			var offset = 0;
+			str = str.toString();
+
+			return iterator;
+
+			function iterator() {
+				var i1 = str.indexOf('\r\n', offset);
+				var i2 = str.indexOf('\n', offset);
+				var i3 = str.indexOf('\r', offset);
+
+				var indexes = [i1, i2, i3];
+				var index = indexes
+					.sort(function (a, b) {
+						if (a > b) return 1;
+						if (a < b) return -1;
+						return 0;
+					})
+					.filter(function (index) {
+						return index !== -1;
+					})[0];
+
+				if (index !== undefined) return extract(index, index === i1 ? 2 : 1);
+
+				var length = str.length;
+				if (length === offset) return null;
+
+				return extract(length, 0);
+			}
+
+			function extract(index, skip) {
+				var line = str.substr(offset, index - offset);
+				offset = index + skip;
+				return line;
+			}
+		}
+	},
+
+	type: 'HTTPParser'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-04 01:17:11</sys_created_on>
+        <sys_id>b685c47193f38250e02873718bba1081</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>HTTPParser</sys_name>
+        <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
+        <sys_update_name>sys_script_include_b685c47193f38250e02873718bba1081</sys_update_name>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-04 01:19:00</sys_updated_on>
+    </sys_script_include>
+</record_update>

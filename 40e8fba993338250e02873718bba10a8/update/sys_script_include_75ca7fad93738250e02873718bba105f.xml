@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_376096_multipart.StreamExt</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Implements extension point x_376096_multipart.StreamExt</description>
+        <name>StreamExt</name>
+        <script><![CDATA[/* global Class,, GlideRecord, GlideScopedEvaluator */
+/* eslint no-undef: "error" */
+var StreamExt = Class.create();
+StreamExt.prototype = {
+	initialize: function () {
+		const scriptGr = new GlideRecord('sys_rte_eb_script_operation');
+		scriptGr.addQuery('sys_id', '77cdb72993b38250e02873718bba1060');
+		scriptGr.setLimit(1);
+		scriptGr.query();
+		if (scriptGr.next()) {
+			this.scriptGr = scriptGr;
+		} else {
+			throw new Error(`${this.type} requires injectable script record`);
+		}
+	},
+
+	/**
+	 * @param {GlideSysAttachmentInputStream|GlideScriptableInputStream} istream
+	 * @return {Array.<number>} bytes
+	 */
+	streamToBytes: function (istream) {
+		this.scriptGr.sys_scope = 'global';
+		this.scriptGr.script = `
+			(function (istream) {
+				var bstream = new Packages.java.io.ByteArrayOutputStream();
+				if (istream instanceof GlideSysAttachmentInputStream) {
+					istream.writeTo(bstream);
+				} else {
+					var fakeGr = new GlideRecord('sc_cart_item');
+					fakeGr.setNewGuidValue(gs.generateGUID());
+					var gsa = new GlideSysAttachment();
+					var attSysID = gsa.writeContentStream(fakeGr, 'fake_stream.txt', 'application/octet-stream', istream);
+					var attStream = new GlideSysAttachmentInputStream(attSysID);
+					attStream.writeTo(bstream);
+					gsa.deleteAttachment(attSysID);
+				}
+				
+				var byteArray = bstream.toByteArray();
+				bstream.close();
+				
+				var bytes = [];
+				for (var i = 0; i < byteArray.length; i++) {
+					bytes.push(byteArray[i]);
+				}
+
+				return bytes;
+			})(istream);
+		`;
+
+		const gse = new GlideScopedEvaluator();
+		gse.putVariable('istream', istream);
+		return gse.evaluateScript(this.scriptGr, 'script');
+	},
+
+	/**
+	 * @param {GlideRecordGenerated} appendGr - the record the attachment is attached to
+	 * @param {string} fileName
+	 * @param {string} contentType
+	 * @param {ArrayLike} bytes
+	 * @return {string} the attachment's SysID
+	 */
+	saveBytesAsAttachment: function (appendGr, fileName, contentType, bytes) {
+		this.scriptGr.sys_scope = 'global';
+		this.scriptGr.script = `
+			(function () {
+				var byteArray = Packages.java.lang.reflect.Array.newInstance(Packages.java.lang.Byte.TYPE, bytes.length);
+				for (var i = 0; i < bytes.length; i++) {
+					var theByte = bytes[i];
+					byteArray[i] = (theByte < 128) ? theByte : (theByte - 256);
+				}
+
+				return new GlideSysAttachment().write(appendGr, fileName,  contentType, byteArray);
+			})();
+		`;
+
+		const gse = new GlideScopedEvaluator();
+		gse.putVariable('appendGr', appendGr);
+		gse.putVariable('bytes', bytes);
+		return gse.evaluateScript(this.scriptGr, 'script', {
+			fileName: fileName,
+			contentType: contentType
+		});
+	},
+
+	type: 'StreamExt'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-04 00:29:41</sys_created_on>
+        <sys_id>75ca7fad93738250e02873718bba105f</sys_id>
+        <sys_mod_count>18</sys_mod_count>
+        <sys_name>StreamExt</sys_name>
+        <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
+        <sys_update_name>sys_script_include_75ca7fad93738250e02873718bba105f</sys_update_name>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-04 07:55:02</sys_updated_on>
+    </sys_script_include>
+</record_update>
