@@ -26,6 +26,9 @@ Multipart.prototype = {
 	},
 
 	parse: function ({ contentType, fileOutput, stream}) {
+		const ostreams = [];
+
+		try {
 		contentType = this.httpParser.parseContentType(contentType);
 		stream = stream.type ? stream : new x_376096_multipart.NOWInputStream(stream);
 		const [type, subType] = contentType.type.split('/');
@@ -117,6 +120,8 @@ Multipart.prototype = {
 				}).call(this);
 
 				const ostream = getOutputStream.call(this, fileName, contentType, childContentType, fileOutput);
+				ostreams.push(ostream);
+
 				const bytes = [];
 				while ((byte = stream.read()) != -1) {
 					bytes.push(byte);
@@ -158,7 +163,16 @@ Multipart.prototype = {
 			return parts;
 		} else {
 			const ostream = getOutputStream('', { type: '' }, contentType, fileOutput);
+			ostreams.push(ostream);
 			return getValue(ostream);
+		}
+		} catch (e) {
+			// if we cannot successfully return potentially attachments, we need to make sure those are cleaned up
+			ostreams.forEach(ostream => {
+				try { ostream.close(); } catch (e) {}
+			});
+
+			throw e;
 		}
 
 		function getValue(ostream) {
@@ -174,7 +188,9 @@ Multipart.prototype = {
 				};
 			} else if (ostream.type == 'FileOutputStream') {
 				return {
-					content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray() : ostream.toBase64(),
+					content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray()
+						: ostream.MultiPartResultMode == 'none' ? undefined
+						: ostream.toBase64(),
 					fileName: ostream.fileName(),
 					contentType: ostream.contentType()
 				};
@@ -194,6 +210,11 @@ Multipart.prototype = {
 				} else if (fileOutput == 'binary') {
 					const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
 					ostream.MultiPartResultMode = 'binary';
+					return ostream;
+				} else if (fileOutput == 'none') {
+					const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
+					ostream.MultiPartResultMode = 'none';
+					ostream.writeByte = function () {};
 					return ostream;
 				} else {
 					throw new Error('Invalid fileOutput');
@@ -245,13 +266,13 @@ Multipart.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 01:20:34</sys_created_on>
         <sys_id>c265c47193f38250e02873718bba107c</sys_id>
-        <sys_mod_count>20</sys_mod_count>
+        <sys_mod_count>22</sys_mod_count>
         <sys_name>Multipart</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_c265c47193f38250e02873718bba107c</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-04 09:13:58</sys_updated_on>
+        <sys_updated_on>2024-08-04 18:53:33</sys_updated_on>
     </sys_script_include>
 </record_update>
