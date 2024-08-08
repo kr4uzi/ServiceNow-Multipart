@@ -25,10 +25,26 @@ Multipart.prototype = {
 		];
 	},
 
-	parse: function ({ contentType, contentSize, fileOutput, stream}) {
+	parse: function ({ contentType, contentSize, fileOutput, stream }) {
 		const ostreams = [];
 
 		try {
+			if (!contentType || !fileOutput || !stream) {
+				throw new Error('parse expectes a { contentType: string, fileOutput: (none, base64, attachment, binary), stream: (GlideSysAttachmentInputStream|GlideScriptableInputStream) } parameter');
+			}
+
+			return this._parse(ostreams, contentType, contentSize, fileOutput, stream);
+		} catch (e) {
+			// if we cannot successfully return potentially attachments, we need to make sure those are cleaned up
+			ostreams.forEach(ostream => {
+				try { ostream.close(); } catch (e) {}
+			});
+
+			throw e;
+		}
+	},
+
+	_parse: function (ostreams, contentType, contentSize, fileOutput, stream) {
 		contentType = this.httpParser.parseContentType(contentType);
 		stream = stream.type ? stream : new x_376096_multipart.NOWInputStream(stream);
 		const [type, subType] = contentType.type.split('/');
@@ -54,7 +70,7 @@ Multipart.prototype = {
 			{
 				const boundary = Array.from('--' + boundaryStr + '\r\n').map(c => c.charCodeAt(0));
 				const bytes = [];
-				while (findArray(bytes, boundary, 0) == -1) {
+				while (this._findArray(bytes, boundary, 0) == -1) {
 					const byte = stream.read();
 					if (byte == -1) {
 						throw new Error('Unexpected EOF');
@@ -124,13 +140,13 @@ Multipart.prototype = {
 					}
 				}).call(this);
 
-				const ostream = getOutputStream.call(this, fileName, contentType, childContentType, fileOutput);
+				const ostream = this._findOutputStream(fileName, contentType, childContentType, fileOutput);
 				ostreams.push(ostream);
 
 				const bytes = [];
 				while ((byte = stream.read()) != -1) {
 					bytes.push(byte);
-					const pos = findArray(bytes, boundary, 0);
+					const pos = this._findArray(bytes, boundary, 0);
 					if (pos != -1) {
 						ostream.writeNBytes(bytes, 0, pos);
 						break;
@@ -147,7 +163,7 @@ Multipart.prototype = {
 				if (end == '--') {
 					parts.push({
 						key: partKey,
-						value: getValue(ostream)
+						value: this._getStreamOutput(ostream)
 					});
 
 					// everything left after this point should be ignored
@@ -155,7 +171,7 @@ Multipart.prototype = {
 				} else if (end == '\r\n') {
 					parts.push({
 						key: partKey,
-						value: getValue(ostream)
+						value: this._getStreamOutput(ostream)
 					});
 
 					// next part can be parsed
@@ -167,102 +183,94 @@ Multipart.prototype = {
 
 			return parts;
 		} else {
-			const ostream = getOutputStream('', { type: '' }, contentType, fileOutput);
+			const ostream = this._findOutputStream('', { type: '' }, contentType, fileOutput);
 			ostreams.push(ostream);
-			return getValue(ostream);
+			return this._getStreamOutput(ostream);
 		}
-		} catch (e) {
-			// if we cannot successfully return potentially attachments, we need to make sure those are cleaned up
-			ostreams.forEach(ostream => {
-				try { ostream.close(); } catch (e) {}
-			});
+	},
 
-			throw e;
+	_getStreamOutput: function (ostream) {
+		ostream.flush();
+
+		if (ostream.type == 'ByteArrayOutputStream') {				
+			return ostream.toString();
+		} else if (ostream.type == 'AttachmentOutputStream') {
+			return {
+				sys_id: ostream.attachmentSysID(),
+				fileName: ostream.fileName(),
+				contentType: ostream.contentType()
+			};
+		} else if (ostream.type == 'FileOutputStream') {
+			return {
+				content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray()
+					: ostream.MultiPartResultMode == 'none' ? undefined
+					: ostream.toBase64(),
+				fileName: ostream.fileName(),
+				contentType: ostream.contentType()
+			};
+		} else if (ostream.type == 'NestedMultipartOutputStream') {
+			return ostream.data();
+		} else {
+			throw new Error('Unknown OutputStream type');
 		}
+	},
 
-		function getValue(ostream) {
-			ostream.flush();
-
-			if (ostream.type == 'ByteArrayOutputStream') {				
-				return ostream.toString();
-			} else if (ostream.type == 'AttachmentOutputStream') {
-				return {
-					sys_id: ostream.attachmentSysID(),
-					fileName: ostream.fileName(),
-					contentType: ostream.contentType()
-				};
-			} else if (ostream.type == 'FileOutputStream') {
-				return {
-					content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray()
-						: ostream.MultiPartResultMode == 'none' ? undefined
-						: ostream.toBase64(),
-					fileName: ostream.fileName(),
-					contentType: ostream.contentType()
-				};
-			} else if (ostream.type == 'NestedMultipartOutputStream') {
-				return ostream.data();
+	_findOutputStream: function (fileName, parentContentType, childContentType, fileOutput) {
+		if (fileName) {
+			if (fileOutput == 'base64') {
+				return new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
+			} else if (fileOutput == 'attachment') {
+				return new x_376096_multipart.AttachmentOutputStream(fileName, childContentType.type);
+			} else if (fileOutput == 'binary') {
+				const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
+				ostream.MultiPartResultMode = 'binary';
+				return ostream;
+			} else if (fileOutput == 'none') {
+				const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
+				ostream.MultiPartResultMode = 'none';
+				ostream.writeByte = function () {};
+				return ostream;
 			} else {
-				throw new Error('Unknown OutputStream type');
+				throw new Error('Invalid fileOutput');
 			}
 		}
 
-		function getOutputStream(fileName, parentContentType, childContentType, fileOutput) {
-			if (fileName) {
-				if (fileOutput == 'base64') {
-					return new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
-				} else if (fileOutput == 'attachment') {
-					return new x_376096_multipart.AttachmentOutputStream(fileName, childContentType.type);
-				} else if (fileOutput == 'binary') {
-					const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
-					ostream.MultiPartResultMode = 'binary';
-					return ostream;
-				} else if (fileOutput == 'none') {
-					const ostream = new x_376096_multipart.FileOutputStream(fileName, childContentType.type);
-					ostream.MultiPartResultMode = 'none';
-					ostream.writeByte = function () {};
-					return ostream;
-				} else {
-					throw new Error('Invalid fileOutput');
-				}
-			}
-
-			const [parentType, parentSubType] = parentContentType.type.split('/');
-			const [childType, childSubType] = childContentType.type.split('/');
-			if (childType == 'multipart' && (parentType == 'multipart' || (parentSubType != childSubType))) {
-				return x_376096_multipart.NestedMultipartOutputStream(this, {
-					fileOutput: fileOutput,
-					contentType: contentType
-					// stream will be set by NestedMultipartStream 
-				});
-			}
-			
-			return new x_376096_multipart.ByteArrayOutputStream();
+		const [parentType, parentSubType] = parentContentType.type.split('/');
+		const [childType, childSubType] = childContentType.type.split('/');
+		if (childType == 'multipart' && (parentType == 'multipart' || (parentSubType != childSubType))) {
+			return x_376096_multipart.NestedMultipartOutputStream(this, {
+				fileOutput: fileOutput,
+				contentType: childContentType
+				// stream will be set by NestedMultipartStream 
+			});
 		}
+		
+		return new x_376096_multipart.ByteArrayOutputStream();
+	},
 
-		function findArray(master, sub, masterStart) {
-			if (sub.length > master.length) {
-				return -1;
-			}
-			
-			masterStart = masterStart || 0;
-			const masterEnd = master.length - sub.length;
-			for (let i = master.indexOf(sub[0], masterStart); i != -1 && i <= masterEnd; i++) {
-				let j = 0;
-				for (; j < sub.length; j++) {
-					if (master[i + j] != sub[j]) {
-						break;
-					}
-				}
-
-				if (j == sub.length) {
-					return i;
-				}
-
-				masterStart = i + 1;
-			}
-
+	_findArray: function (master, sub, masterStart) {
+		if (sub.length > master.length) {
 			return -1;
 		}
+		
+		masterStart = masterStart || 0;
+		const masterEnd = master.length - sub.length;
+		for (let i = master.indexOf(sub[0], masterStart); i != -1 && i <= masterEnd; i++) {
+			let j = 0;
+			for (; j < sub.length; j++) {
+				if (master[i + j] != sub[j]) {
+					break;
+				}
+			}
+
+			if (j == sub.length) {
+				return i;
+			}
+
+			masterStart = i + 1;
+		}
+
+		return -1;
 	},
 
 	type: 'Multipart'
@@ -271,13 +279,13 @@ Multipart.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 01:20:34</sys_created_on>
         <sys_id>c265c47193f38250e02873718bba107c</sys_id>
-        <sys_mod_count>23</sys_mod_count>
+        <sys_mod_count>25</sys_mod_count>
         <sys_name>Multipart</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_c265c47193f38250e02873718bba107c</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-08 01:10:19</sys_updated_on>
+        <sys_updated_on>2024-08-08 01:42:21</sys_updated_on>
     </sys_script_include>
 </record_update>
