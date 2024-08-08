@@ -11,29 +11,60 @@
 /* eslint no-undef: "error" */
 var OutputStream = Class.create();
 OutputStream.prototype = {
-	initialize: function() {
-		
+	initialize: function () {
+
 	},
 
 	/**
 	 * Closes this output stream and releases any system resources associated with this stream.
 	 */
-	close: function() {
-		
+	close: function () {
+
 	},
 
 	/**
 	 * Flushes this output stream and forces any buffered output bytes to be written out.
 	 */
-	flush: function() {
+	flush: function () {
 
+	},
+
+	/**
+	 * @overload
+	 * Writes the specified byte to this output stream.
+	 * @param {number} b
+	 */
+
+	/**
+	 * @overload
+	 * Writes b.length bytes from the specified byte array to this output stream.
+	 * @param {Array.<number>} b
+	 * @return {void}
+	 */
+
+	/**
+	 * Writes len bytes from the specified byte array starting at offset off to this output stream.
+	 * @param {Array.<number>|number} b
+	 * @param {number=} off
+	 * @param {number=} len
+	 */
+	write: function (b, off, len) {
+		if (arguments.length == 1) {
+			if (typeof b == 'number') {
+				this.writeByte(b);
+			} else {
+				this.writeAllBytes(b);
+			}
+		} else if (arguments.length == 3) {
+			this.writeNBytes(b, off, len);
+		}
 	},
 
 	/**
 	 * Writes the specified byte to this output stream.
 	 * @param {number} b - the byte.
 	 */
-	writeByte: function(b) {
+	writeByte: function (b) {
 		throw new Error('implementation required by child class');
 	},
 
@@ -41,7 +72,7 @@ OutputStream.prototype = {
 	 * Writes b.length bytes from the specified byte array to this output stream.
 	 * @param {ArrayLike<number>} b - the data.
 	 */
-	writeAllBytes: function(b) {
+	writeAllBytes: function (b) {
 		this.writeNBytes(b, 0, b.length);
 	},
 
@@ -51,7 +82,7 @@ OutputStream.prototype = {
 	 * @param {number} off - the start offset in the data.
 	 * @param {number} len - the number of bytes to write.
 	 */
-	writeNBytes: function(b, off, len) {
+	writeNBytes: function (b, off, len) {
 		for (let i = off; i < b.length && i < len; i++) {
 			this.writeByte(b[i]);
 		}
@@ -63,13 +94,13 @@ OutputStream.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:22:49</sys_created_on>
         <sys_id>1d1933e993ff4250e02873718bba1089</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>4</sys_mod_count>
         <sys_name>OutputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_1d1933e993ff4250e02873718bba1089</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-04 08:25:57</sys_updated_on>
+        <sys_updated_on>2024-08-05 19:14:44</sys_updated_on>
     </sys_script_include>
 </record_update>

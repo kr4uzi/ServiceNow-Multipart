@@ -25,7 +25,7 @@ Multipart.prototype = {
 		];
 	},
 
-	parse: function ({ contentType, fileOutput, stream}) {
+	parse: function ({ contentType, contentSize, fileOutput, stream}) {
 		const ostreams = [];
 
 		try {
@@ -37,13 +37,18 @@ Multipart.prototype = {
 				throw new Error('Unsupported multipart subtype');
 			}
 			
-			// trailing space are allowed, but need to be deleted
+			// trailing spaces are allowed, but must be ignored
 			const boundaryStr = contentType.parameters.boundary?.trimEnd();
 			if (!boundaryStr) {
 				throw new Error('the boundary parameter is mandatory for multipart');
 			} else if (boundaryStr.length > 70) {
 				throw new Error('the boundary parameter must not be longer than 70 characters');
 			}
+
+			// TODO: Performance improvement: use a PushbackInputStream-like stream
+			// which requires us to check the boundary less often
+			// Using the contentSize parameter (currently unused), a reasonable block-size
+			// can be calculated for the pushback-size
 
 			// proceed to the first boundary (anything before that may be ignored)
 			{
@@ -266,13 +271,13 @@ Multipart.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 01:20:34</sys_created_on>
         <sys_id>c265c47193f38250e02873718bba107c</sys_id>
-        <sys_mod_count>22</sys_mod_count>
+        <sys_mod_count>23</sys_mod_count>
         <sys_name>Multipart</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_c265c47193f38250e02873718bba107c</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-04 18:53:33</sys_updated_on>
+        <sys_updated_on>2024-08-08 01:10:19</sys_updated_on>
     </sys_script_include>
 </record_update>
