@@ -16,7 +16,12 @@ StreamExt.prototype = {
 	 * @return {InputStream}
 	 */
 	bufferedStream: function (istream, bufferSize) {
-		return new Packages.java.io.BufferedInputStream(istream, bufferSize);
+		return new function () {
+			var buffer = new Packages.java.io.BufferedInputStream(istream, bufferSize);
+			this.read = function() {
+				return buffer.read();
+			};
+		};
 	},
 
 	/**
@@ -25,23 +30,12 @@ StreamExt.prototype = {
 	 */
 	streamToBytes: function (istream) {
 		var bstream = new Packages.java.io.ByteArrayOutputStream();
-		if (istream instanceof GlideSysAttachmentInputStream) {
-			istream.writeTo(bstream);
-		} else {
-			var fakeGr = new GlideRecord('sc_cart_item');
-			fakeGr.setNewGuidValue(gs.generateGUID());
-			var gsa = new GlideSysAttachment();
+		istream.writeTo(bstream);
 
-			// luckily writeContentStream works with both GlideSysAttachmentInputStream and GlideScriptableInputStream
-			var attSysID = gsa.writeContentStream(fakeGr, 'fake_stream.txt', 'application/octet-stream', istream);
-			var attStream = new GlideSysAttachmentInputStream(attSysID);
-			attStream.writeTo(bstream);
-			gsa.deleteAttachment(attSysID);
-		}
-		
-		bstream.close();
-		var byteArray = bstream.toByteArray();
-		var bytes = [];
+		// need to convert the Java ByteArray to a JavaScript array, other wise a glide fencing error
+		// will be thrown when this function used by a scoped app
+		var byteArray = bstream.toByteArray();				
+		var bytes = new Array(byteArray.length);
 		for (var i = 0; i < byteArray.length; i++) {
 			bytes.push(byteArray[i]);
 		}
@@ -77,13 +71,24 @@ StreamExt.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:29:18</sys_created_on>
         <sys_id>b18abbe993738250e02873718bba1044</sys_id>
-        <sys_mod_count>5</sys_mod_count>
+        <sys_mod_count>9</sys_mod_count>
         <sys_name>StreamExt</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_extension_point_b18abbe993738250e02873718bba1044</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-08 01:01:40</sys_updated_on>
+        <sys_updated_on>2024-08-29 17:20:44</sys_updated_on>
     </sys_extension_point>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>b18abbe993738250e02873718bba1044</id>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-29 15:54:14</sys_created_on>
+        <sys_id>7c2e3b35db549e5042f3c9db1396191e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-29 15:54:14</sys_updated_on>
+        <table>sys_extension_point</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
 </record_update>

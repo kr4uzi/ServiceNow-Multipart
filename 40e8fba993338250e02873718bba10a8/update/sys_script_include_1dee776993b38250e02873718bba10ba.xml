@@ -6,6 +6,7 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>Wraps the given InputStream (from Attachment or Scripted Rest API) into a object which can be read byte-wise</description>
+        <mobile_callable>false</mobile_callable>
         <name>NOWInputStream</name>
         <script><![CDATA[/* global Class, InputStream, GlideScriptedExtensionPoint, Uint8Array */
 /* global x_376096_multipart */
@@ -16,88 +17,50 @@ NOWInputStream.prototype = Object.extendsObject(x_376096_multipart.InputStream, 
 	 * @param {GlideSysAttachmentInputStream|GlideScriptableInputStream} istream
 	 * @return {NOWInputStream}
 	 */
-    initialize: function(istream) {
+	initialize: function (istream) {
 		const eps = new GlideScriptedExtensionPoint().getExtensions('StreamExt');
 		if (eps.length) {
 			eps[0].initialize();
 			this._bstream = eps[0].bufferedStream(istream, 4096);
-			//const untypedBytes = eps[0].streamToBytes(istream);
-			//this._buff = new Uint8Array(untypedBytes);
 		} else {
 			throw new Error('StreamExt implementation required');
 		}
 
-		// this._pos = 0;
-    },
-
-	/**
-	 * Returns an estimate of the number of bytes that can be read (or skipped over) from this input stream without blocking, which may be 0, or 0 when end of stream is detected.
-	 * @return {number} an estimate of the number of bytes that can be read (or skipped over) from this input stream without blocking or 0 when it reaches the end of the input stream.
-	 */
-	// available: function() {
-	// 	return this._buff.length - this._pos;
-	// },
+		this._pos = 0;
+	},
 
 	/**
 	 * Reads the next byte of data from the input stream.
 	 * @return {number} the next byte of data, or -1 if the end of the stream is reached.
 	 */
-	read: function() {
+	read: function () {
 		return this._bstream.read();
-		// if (this._pos < this._buff.length) {
-		// 	return this._buff[this._pos++];
-		// }
-
-		// return -1;
 	},
 
-	/**
-	 * Reads all remaining bytes from the input stream.
-	 * @return {Uint8Array} a byte array containing the bytes read from this input stream
-	 */
-	// readAllBytes: function() {
-	// 	return this.readNBytes(this._buff.length);
-	// },
-
-	/**
-	 * Reads up to a specified number of bytes from the input stream.
-	 * @param {number} len - the maximum number of bytes to read
-	 * @return {Uint8Array} a byte array containing the bytes read from this input stream
-	 */
-	// readNBytes: function(len) {
-	// 	const bytes = new Uint8Array(Math.min(this._buff.length - this._pos, len));
-	// 	let i = 0;
-	// 	while (i < bytes.length) {
-	// 		bytes[i++] = this._buff[this._pos++];
-	// 	}
-
-	// 	return bytes;
-	// },
-
-	/**
-	 * Skips over and discards n bytes of data from this input stream.
-	 * @param {number} n - the number of bytes to be skipped.
-	 * @return {number} the actual number of bytes skipped
-	 */
-	// skip(n) {
-	// 	const skippable = Math.min(n, this._buff.length - this._pos);
-	// 	this._pos += skippable;
-	// 	return skippable;
-	// },
-
-    type: 'NOWInputStream'
+	type: 'NOWInputStream'
 });]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:48:33</sys_created_on>
         <sys_id>1dee776993b38250e02873718bba10ba</sys_id>
-        <sys_mod_count>17</sys_mod_count>
+        <sys_mod_count>19</sys_mod_count>
         <sys_name>NOWInputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_1dee776993b38250e02873718bba10ba</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-08 01:02:58</sys_updated_on>
+        <sys_updated_on>2024-08-29 17:29:18</sys_updated_on>
     </sys_script_include>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>1dee776993b38250e02873718bba10ba</id>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-08-29 15:57:00</sys_created_on>
+        <sys_id>c1ce3b75db549e5042f3c9db139619ee</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-08-29 15:57:00</sys_updated_on>
+        <table>sys_script_include</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
 </record_update>
