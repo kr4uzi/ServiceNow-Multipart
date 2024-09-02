@@ -13,6 +13,8 @@
 var NestedMultipartOutputStream = Class.create();
 NestedMultipartOutputStream.prototype = Object.extendsObject(x_376096_multipart.OutputStream, {
 	initialize: function(processor, config) {
+		x_376096_multipart.OutputStream.prototype.initialize.call(this);
+
 		this._bytes = new x_376096_multipart.ByteArrayOutputStream();
 		this._processor = processor;
 		this._config = config;
@@ -37,13 +39,13 @@ NestedMultipartOutputStream.prototype = Object.extendsObject(x_376096_multipart.
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 02:25:57</sys_created_on>
         <sys_id>0005d4f993f78250e02873718bba1054</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>4</sys_mod_count>
         <sys_name>NestedMultipartOutputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_0005d4f993f78250e02873718bba1054</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-04 09:08:45</sys_updated_on>
+        <sys_updated_on>2024-09-01 15:47:47</sys_updated_on>
     </sys_script_include>
 </record_update>

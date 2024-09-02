@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_376096_multipart.PushbackInputStream</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>PushbackInputStream</name>
+        <script><![CDATA[/* global x_376096_multipart */
+/* global Class, Uint8Array */
+/* eslint no-undef: "error" */
+var PushbackInputStream = Class.create();
+PushbackInputStream.prototype = Object.extendsObject(x_376096_multipart.InputStream, {
+	initialize: function (istream) {
+		x_376096_multipart.InputStream.prototype.initialize.call(this);
+
+		this._stream = istream;
+		this._buff = [];
+	},
+
+	skip: function (n) {
+		const buffered = this._buff.splice(0, n).length;
+		if (n > buffered) {
+			return buffered + this._stream.skip(n - buffered);
+		}
+
+		return buffered;
+	},
+
+	read: function () {
+		if (this._buff.length) {
+			return this._buff.shift();
+		}
+
+        return this._stream.read();
+	},
+
+	readNBytes: function (len) {
+		const buffered = this._buff.splice(0, len);
+		len -= buffered.length;
+		
+		const unbuffered = this._stream.readNBytes(len);
+		
+		const result = new Uint8Array(buffered.length + unbuffered.length);
+		result.set(buffered);
+
+		if (unbuffered.length) {
+			// there is a bug in the NOW implementation of this 
+			// where a offset of 0 causes out of bounds for zero-sized arrays
+			result.set(unbuffered, buffered.length);
+		}
+		
+		return result;
+	},
+
+	unread: function (b) {
+		this._buff.push(b);
+	},
+
+	unreadBytes: function (bytes) {
+		this._buff.unshift(...bytes);
+	},
+
+	close: function () {
+		this._stream.close();
+	},
+
+	type: 'PushbackInputStream'
+});]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>markus.kraus</sys_created_by>
+        <sys_created_on>2024-09-01 10:46:12</sys_created_on>
+        <sys_id>2b8c8e329350d210e02873718bba10d8</sys_id>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>PushbackInputStream</sys_name>
+        <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
+        <sys_update_name>sys_script_include_2b8c8e329350d210e02873718bba10d8</sys_update_name>
+        <sys_updated_by>markus.kraus</sys_updated_by>
+        <sys_updated_on>2024-09-02 19:24:49</sys_updated_on>
+    </sys_script_include>
+</record_update>

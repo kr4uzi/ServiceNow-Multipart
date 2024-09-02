@@ -6,15 +6,12 @@
         <caller_access/>
         <client_callable>false</client_callable>
         <description>Implements extension point x_376096_multipart.StreamExt</description>
-        <mobile_callable>false</mobile_callable>
         <name>StreamExt</name>
         <script><![CDATA[/* global Class,, GlideRecord, GlideScopedEvaluator */
 /* eslint no-undef: "error" */
 var StreamExt = Class.create();
 StreamExt.prototype = {
 	initialize: function () {
-		//const scriptGr = new GlideRecord('sys_rte_eb_script_operation');
-		//scriptGr.addQuery('sys_id', '77cdb72993b38250e02873718bba1060');
 		const scriptGr = new GlideRecord('clone_cleanup_script');
 		scriptGr.addQuery('sys_scope', 'global');
 		scriptGr.setLimit(1);
@@ -32,7 +29,6 @@ StreamExt.prototype = {
 	 * @return {InputStream}
 	 */
 	bufferedStream: function (istream, bufferSize) {
-		//this.scriptGr.sys_scope = 'global';
 		this.scriptGr.script = `
 			(function () {
 				return new function () {
@@ -55,7 +51,6 @@ StreamExt.prototype = {
 	 * @return {Array.<number>} bytes
 	 */
 	streamToBytes: function (istream) {
-		this.scriptGr.sys_scope = 'global';
 		this.scriptGr.script = `
 			(function (istream) {
 				var bstream = new Packages.java.io.ByteArrayOutputStream();
@@ -84,7 +79,6 @@ StreamExt.prototype = {
 	 * @return {string} the attachment's SysID
 	 */
 	saveBytesAsAttachment: function (appendGr, fileName, contentType, bytes) {
-		this.scriptGr.sys_scope = 'global';
 		this.scriptGr.script = `
 			(function () {
 				var byteArray = Packages.java.lang.reflect.Array.newInstance(Packages.java.lang.Byte.TYPE, bytes.length);
@@ -112,24 +106,13 @@ StreamExt.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:29:41</sys_created_on>
         <sys_id>75ca7fad93738250e02873718bba105f</sys_id>
-        <sys_mod_count>36</sys_mod_count>
+        <sys_mod_count>37</sys_mod_count>
         <sys_name>StreamExt</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_75ca7fad93738250e02873718bba105f</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-29 21:14:17</sys_updated_on>
+        <sys_updated_on>2024-09-01 16:27:48</sys_updated_on>
     </sys_script_include>
-    <sys_es_latest_script action="INSERT_OR_UPDATE">
-        <id>75ca7fad93738250e02873718bba105f</id>
-        <sys_created_by>markus.kraus</sys_created_by>
-        <sys_created_on>2024-08-29 15:49:36</sys_created_on>
-        <sys_id>f41df7b1db549e5042f3c9db1396193e</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-29 15:49:36</sys_updated_on>
-        <table>sys_script_include</table>
-        <use_es_latest>true</use_es_latest>
-    </sys_es_latest_script>
 </record_update>

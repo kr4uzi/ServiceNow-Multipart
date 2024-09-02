@@ -32,16 +32,16 @@
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:21:23</sys_created_on>
         <sys_id>40e8fba993338250e02873718bba10a8</sys_id>
-        <sys_mod_count>5</sys_mod_count>
+        <sys_mod_count>6</sys_mod_count>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-29 17:42:18</sys_updated_on>
+        <sys_updated_on>2024-09-01 10:48:26</sys_updated_on>
         <template/>
         <trackable>true</trackable>
         <uninstall_blocked>false</uninstall_blocked>
         <user_role/>
         <vendor/>
         <vendor_prefix/>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
     </sys_app>
     <sys_translated_text action="delete_multiple" query="documentkey=40e8fba993338250e02873718bba10a8"/>
     <sys_attachment action="INSERT_OR_UPDATE">
@@ -49,7 +49,6 @@
         <chunk_size_bytes>700000</chunk_size_bytes>
         <compressed>true</compressed>
         <content_type>image/png</content_type>
-        <encryption_context/>
         <file_name>logo</file_name>
         <hash>c589f3752808972f58d29afc715ea9ebdba175f835bf78dbc976a6bd49d44eae</hash>
         <image_height>128</image_height>
@@ -59,8 +58,6 @@
         <state>available</state>
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-29 17:41:05</sys_created_on>
-        <sys_domain>056a7e84dbdf8a5042f3c9db13961998</sys_domain>
-        <sys_domain_path>!!!/!!$/</sys_domain_path>
         <sys_id>f996d84edbd49e5042f3c9db13961945</sys_id>
         <sys_mod_count>3</sys_mod_count>
         <sys_updated_by>markus.kraus</sys_updated_by>
