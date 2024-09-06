@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
     <sys_script_include action="INSERT_OR_UPDATE">
-        <access>package_private</access>
+        <access>public</access>
         <active>true</active>
         <api_name>x_376096_multipart.InputStream</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
         <description/>
         <name>InputStream</name>
-        <script><![CDATA[/* global Class, Uint8Array */
+        <script><![CDATA[/* global x_376096_multipart */
+/* global Class, Uint8Array */
 /* eslint no-undef: "error" */
 var InputStream = Class.create();
 InputStream.prototype = {
@@ -47,11 +48,93 @@ InputStream.prototype = {
 	},
 
 	/**
+	 * @param {ArrayViewLike} search
+	 * @param {{ writeTo?: x_376096_multipart.OutputStream, writeBlock?: number }} [options]
+	 */
+	readUntil: function (search, options) {
+		const out = options?.writeTo || (() => {
+			const nullOs = new x_376096_multipart.OutputStream();
+			nullOs.writeByte = function () { };
+			nullOs.writeBytes = function () { };
+			return nullOs;
+		})();
+		const readBlock = Math.min(options?.readBlock || 1024);
+		const writeBlock = Math.max(options?.writeBlock || search.length, search.length, 1024);
+		const threshold = writeBlock + search.length;
+		const readBytes = this.unreadBytes ? () => this.readNBytes(readBlock) : () => {
+			const theByte = this.read();
+			if (theByte == -1) { return []; }
+			return [theByte];
+		};
+
+		const bytes = [];
+		let pos = -1;
+		let searchStart = 0;
+		while ((pos = findArray(bytes, search, searchStart)) == -1) {
+			if (bytes.length > threshold) {
+				out.writeBytes(bytes.splice(0, writeBlock));
+			}
+
+			// the array has already been search, only search the new bytes (+ the potential overlap at the end)
+			searchStart = Math.max(0, bytes.length - search.length);
+
+			const block = readBytes();
+			if (block.length == 0) {
+				break;
+			}
+
+			bytes.push(...block);
+		}
+
+		if (pos == -1) {
+			out.writeBytes(bytes);
+			return false;
+		}
+
+		// move the rest up to the find pos into the output stream ...
+		out.writeBytes(bytes.splice(0, pos));
+
+		// ... but discard the search array itself ...
+		bytes.splice(0, search.length);
+
+		// ... (and put the remaining bytes back to the stream)
+		// note: if unreadbytes is not supported, no unnecessary bytes have been read in the first place
+		this.unreadBytes?.call(this, bytes);
+
+		return true;
+
+		function findArray(master, sub, masterStart) {
+			if (sub.length > master.length) {
+				return -1;
+			}
+			
+			const searchEnd = master.length - sub.length;
+			let i = masterStart || 0;
+			while (i <= searchEnd && (i = master.indexOf(sub[0], i)) != -1) {
+				let j = 0;
+				for (; j < sub.length; j++) {
+					if (master[i + j] != sub[j]) {
+						break;
+					}
+				}
+
+				if (j == sub.length) {
+					return i;
+				}
+
+				i++;
+			}
+
+			return -1;
+		}
+	},
+
+	/**
 	 * Reads the next byte of data from the input stream.
 	 * @return {number} the next byte of data, or -1 if the end of the stream is reached.
 	 */
 	read: function() {
-		return -1;
+		throw new Error('Implementation required');
 	},
 
 	/**
@@ -123,13 +206,13 @@ InputStream.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:25:08</sys_created_on>
         <sys_id>fca9b36593738250e02873718bba10c5</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>15</sys_mod_count>
         <sys_name>InputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_fca9b36593738250e02873718bba10c5</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-08-08 00:37:11</sys_updated_on>
+        <sys_updated_on>2024-09-06 17:22:23</sys_updated_on>
     </sys_script_include>
 </record_update>

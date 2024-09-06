@@ -15,16 +15,17 @@ Multipart.prototype = {
 	initialize: function () {
 		this.httpParser = new x_376096_multipart.HTTPParser();
 		this.supportedSubtypes = [
-			//'alternative', // RFC1521
+			'alternative', 	// RFC1521
 			//'byteranges', // RFC2068
-			//'digest', // RFC1521
-			'form-data', // RFC1867
-			//'mixed', // RFC1521
-			//'parallel', // RFC1521
-			//'related', RFC2112
+			//'digest', 	// RFC1521
+			'form-data', 	// RFC1867
+			'mixed', 		// RFC1521
+			//'parallel', 	// RFC1521
+			'related',  	// RFC2112
 		];
 
-		this.headerSeparator = Array.from('\r\n\r\n').map(c => c.charCodeAt(0));
+		this.lineSeparator = '\r\n';
+		this.headerSeparator = Array.from(this.lineSeparator + this.lineSeparator).map(c => c.charCodeAt(0));
 	},
 
 	/**
@@ -41,10 +42,12 @@ Multipart.prototype = {
 
 			return this._parse(ostreams, contentType, contentSize, fileOutput, stream);
 		} catch (e) {
-			// if we cannot successfully return potentially attachments, we need to make sure those are cleaned up
-			ostreams.forEach(ostream => {
-				try { ostream.close(); } catch (e) {}
-			});
+			if (fileOutput == 'attachment') {
+				// if we cannot successfully return, we need to make sure attachments are cleaned up
+				ostreams.forEach(ostream => {
+					try { ostream.close(); } catch (e) { }
+				});
+			}
 
 			throw e;
 		}
@@ -52,7 +55,7 @@ Multipart.prototype = {
 
 	_parseMultiPartElement: function (stream, contentType, subType, boundary, fileOutputMode) {
 		const osHeader = new x_376096_multipart.ByteArrayOutputStream();
-		if (!this._seekPBStream(stream, this.headerSeparator, 128, osHeader, 256)) {
+		if (!stream.readUntil(this.headerSeparator, { writeTo: osHeader, writeBlock: 1024, readBlock: 128 })) {
 			throw new Error('Unexpected EOF (header)');
 		}
 
@@ -72,7 +75,7 @@ Multipart.prototype = {
 				if (contentDisposition.type != 'form-data') {
 					throw new Error('Each part MUST contain a Content-Disposition where the disposition type is "form-data"');
 				}
-				
+
 				if ('name' in contentDisposition.parameters) {
 					partKey = contentDisposition.parameters.name.trim();
 				}
@@ -93,7 +96,7 @@ Multipart.prototype = {
 
 		// find a matching output stream for the content type (e.g. blob for attachments, bytearray for text, ...)
 		const osBody = this._getOutputStreamForContent(fileName, contentType, partContentType, fileOutputMode);
-		if (!this._seekPBStream(stream, boundary, 1024, osBody, 1024)) {
+		if (!stream.readUntil(boundary, { writeTo: osBody, writeBlock: 4096, readBlock: fileName ? 4096 : 128 })) {
 			osBody.close();
 			throw new Error('Unexpected EOF (no boundary)');
 		}
@@ -121,6 +124,125 @@ Multipart.prototype = {
 		throw new Error('unexpected EOF (form-data not separated by \\r\\n)');
 	},
 
+	_getStreamOutput: function (ostream) {
+		ostream.flush();
+
+		if (ostream.type == 'ByteArrayOutputStream') {				
+			return ostream.toString();
+		} else if (ostream.type == 'AttachmentOutputStream') {
+			return {
+				sys_id: ostream.attachmentSysID(),
+				fileName: ostream.fileName(),
+				contentType: ostream.contentType()
+			};
+		} else if (ostream.type == 'BlobOutputStream') {
+			return {
+				content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray()
+					: ostream.MultiPartResultMode == 'none' ? undefined
+					: ostream.toBase64(),
+				fileName: ostream.fileName(),
+				contentType: ostream.contentType()
+			};
+		} else if (ostream.type == 'NestedMultipartOutputStream') {
+			return ostream.data();
+		} else {
+			throw new Error('Unknown OutputStream type');
+		}
+	},
+
+	parse2: function (stream, _headers) {
+		// transform _headers into a object without untouched values, but lower-cased keys
+		const headers = Object.entries(_headers).reduce((obj, [key, value]) => { obj[key.toLowerCase()] = value; return obj; }, {});
+		if (!('content-type' in headers)) {
+			return {
+				headers: headers,
+				stream: stream
+			};
+		}
+
+		const contentType = this.httpParser.parseContentType(headers['content-type']);
+		const [type, subType] = contentType.type.split('/');
+		if (type != 'multipart') {
+			return {
+				headers: headers,
+				stream: stream
+			};
+		}
+
+		if (!this.supportedSubtypes.includes(subType)) {
+			throw new Error('Unsupported multipart subtype');
+		}
+
+		// trailing spaces are allowed, but must be ignored
+		const boundaryStr = contentType.parameters.boundary?.trimEnd();
+		if (!boundaryStr) {
+			throw new Error('the boundary parameter is mandatory for multipart');
+		} else if (boundaryStr.length > 70) {
+			throw new Error('the boundary parameter must not be longer than 70 characters');
+		}
+
+		// proceed to the first boundary (anything before that may be ignored)
+		if (!stream.readUntil(Array.from('--' + boundaryStr + '\r\n').map(c => c.charCodeAt(0)), { readBlock: 128 })) {
+			throw new Error('Unexpected EOF (no initial boundary)');
+		}
+
+		const boundary = Array.from('\r\n--' + boundaryStr).map(c => c.charCodeAt(0));
+		const parts = [];
+		let done = false;
+		while (!done) {
+			const osHeader = new x_376096_multipart.ByteArrayOutputStream();
+			if (!stream.readUntil(boundary, { writeTo: osHeader, writeBlock: 4096, readBlock: 512 })) {
+				throw new Error('Unexpected EOF (header)');
+			}
+
+			let readBlock = 512;
+			const headers = this.httpParser.parse(osHeader.toString());
+			if ('content-disposition' in headers) {
+				const dispo = this.httpParser.parseContentDisposition(headers['content-disposition']);
+				if ('filename' in dispo.parameters) {
+					if (!dispo.parameters.filename.trim()) {
+						throw new Error('filename must not be empty if set');
+					}
+
+					readBlock = 4096;
+				}
+
+				if (contentType.type == 'multipart/form-data') {
+					if (dispo.type != 'form-data') {
+						throw new Error('Each part MUST contain a Content-Disposition where the disposition type is "form-data"');
+					} else if (!dispo.parameters.name?.trim()) {
+						throw new Error('The Content-Disposition header field MUST also contain an additional parameter of "name"');
+					}
+				}
+			} else {
+				if (contentType.type == 'multipart/form-data') {
+					throw new Error('Content-Disposition is mandatory for form-data');
+				}
+			}
+
+			const osBody = new x_376096_multipart.ByteArrayOutputStream();
+			if (!stream.readUntil(boundary, { writeTo: osBody, writeBlock: 8192, readBlock: readBlock })) {
+				throw new Error('Unexpected EOF (body)');
+			}
+
+			const end = String.fromCharCode(...stream.readNBytes(2));
+			if (end != '--' && end != this.lineSeparator) {
+				throw new Error('unexpected EOF (data not separated by \\r\\n)');
+			}
+
+			parts.push({
+				headers: headers,
+				stream: osBody
+			});
+
+			// Note: anything left the end markers (--) should be ignored
+			done = end == '--';
+		}
+
+		return parts;
+	},
+
+
 	/**
 	 * @param {Array.<x_376096_multipart.OutputStream>} ostreams - the container of output streams for error cleanup
 	 * @param {string} contentType
@@ -131,8 +253,10 @@ Multipart.prototype = {
 	 */
 	_parse: function (ostreams, contentType, contentSize, fileOutput, stream) {
 		contentType = this.httpParser.parseContentType(contentType);
+		
 		stream = stream.type ? stream : new x_376096_multipart.NOWInputStream(stream);
 		if (stream.type != 'PushbackInputStream') {
+			// PushbackInputStream increaseses the processing speed because we can parse inputs
 			stream = new x_376096_multipart.PushbackInputStream(stream);
 		}
 
@@ -146,7 +270,7 @@ Multipart.prototype = {
 		if (!this.supportedSubtypes.includes(subType)) {
 			throw new Error('Unsupported multipart subtype');
 		}
-		
+
 		// trailing spaces are allowed, but must be ignored
 		const boundaryStr = contentType.parameters.boundary?.trimEnd();
 		if (!boundaryStr) {
@@ -156,7 +280,7 @@ Multipart.prototype = {
 		}
 
 		// proceed to the first boundary (anything before that may be ignored)
-		if (!this._seekPBStream(stream, Array.from('--' + boundaryStr + '\r\n').map(c => c.charCodeAt(0)), 128)) {
+		if (!stream.readUntil(Array.from('--' + boundaryStr + '\r\n').map(c => c.charCodeAt(0)), { readBlock: 128 })) {
 			throw new Error('Unexpected EOF (no initial boundary)');
 		}
 
@@ -187,75 +311,6 @@ Multipart.prototype = {
 		return parts;
 	},
 
-	/**
-	 * @param {x_376096_multipart.PushbackInputStream} istream
-	 * @param {Array.<number>} arr
-	 * @param {number} searchWindow
-	 * @return {Array.<number>}
-	 * @boolean
-	 */
-	_seekPBStream: function (istream, arr, searchWindow, ostream, writeWindow) {
-		writeWindow = writeWindow || searchWindow;
-		ostream = ostream || { writeAllBytes: function () {} };
-
-		const bytes = [];
-		let pos = -1;
-		let searchStart = 0;
-		while ((pos = this._findArray(bytes, arr, searchStart)) == -1) {
-			if (bytes.length > writeWindow) {
-				ostream.writeAllBytes(bytes.splice(0, Math.max(bytes.length - arr.length, 0)));
-			}
-
-			searchStart = Math.max(0, bytes.length - arr.length);
-			const block = istream.readNBytes(searchWindow);
-			if (block.length == 0) {
-				break;
-			}
-
-			bytes.push(...block);
-		}
-
-		if (pos == -1) {
-			ostream.writeAllBytes(bytes);
-			return false;
-		}
-
-		// move the rest up to the arr-index into the output stream ...
-		ostream.writeAllBytes(bytes.splice(0, pos));
-
-		// ... but discard the arr itself
-		bytes.splice(0, arr.length);
-
-		istream.unreadBytes(bytes);
-		return true;
-	},
-
-	_getStreamOutput: function (ostream) {
-		ostream.flush();
-
-		if (ostream.type == 'ByteArrayOutputStream') {				
-			return ostream.toString();
-		} else if (ostream.type == 'AttachmentOutputStream') {
-			return {
-				sys_id: ostream.attachmentSysID(),
-				fileName: ostream.fileName(),
-				contentType: ostream.contentType()
-			};
-		} else if (ostream.type == 'BlobOutputStream') {
-			return {
-				content: ostream.MultiPartResultMode == 'binary' ? ostream.toByteArray()
-					: ostream.MultiPartResultMode == 'none' ? undefined
-					: ostream.toBase64(),
-				fileName: ostream.fileName(),
-				contentType: ostream.contentType()
-			};
-		} else if (ostream.type == 'NestedMultipartOutputStream') {
-			return ostream.data();
-		} else {
-			throw new Error('Unknown OutputStream type');
-		}
-	},
-
 	_getOutputStreamForContent: function (fileName, parentContentType, childContentType, fileOutput) {
 		if (fileName) {
 			if (fileOutput == 'base64') {
@@ -269,7 +324,8 @@ Multipart.prototype = {
 			} else if (fileOutput == 'none') {
 				const ostream = new x_376096_multipart.BlobOutputStream(fileName, childContentType.type);
 				ostream.MultiPartResultMode = 'none';
-				ostream.writeByte = function () {};
+				ostream.writeByte = function () { };
+				ostream.writeBytes = function () { };
 				return ostream;
 			} else {
 				throw new Error('Invalid fileOutput');
@@ -285,33 +341,8 @@ Multipart.prototype = {
 				// stream will be set by NestedMultipartStream 
 			});
 		}
-		
+
 		return new x_376096_multipart.ByteArrayOutputStream();
-	},
-
-	_findArray: function (master, sub, masterStart) {
-		if (sub.length > master.length) {
-			return -1;
-		}
-		
-		const searchEnd = master.length - sub.length;
-		let i = masterStart || 0;
-		while (i <= searchEnd && (i = master.indexOf(sub[0], i)) != -1) {
-			let j = 0;
-			for (; j < sub.length; j++) {
-				if (master[i + j] != sub[j]) {
-					break;
-				}
-			}
-
-			if (j == sub.length) {
-				return i;
-			}
-
-			i++;
-		}
-
-		return -1;
 	},
 
 	type: 'Multipart'
@@ -320,13 +351,13 @@ Multipart.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 01:20:34</sys_created_on>
         <sys_id>c265c47193f38250e02873718bba107c</sys_id>
-        <sys_mod_count>86</sys_mod_count>
+        <sys_mod_count>115</sys_mod_count>
         <sys_name>Multipart</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_c265c47193f38250e02873718bba107c</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-09-02 19:26:11</sys_updated_on>
+        <sys_updated_on>2024-09-06 17:18:00</sys_updated_on>
     </sys_script_include>
 </record_update>

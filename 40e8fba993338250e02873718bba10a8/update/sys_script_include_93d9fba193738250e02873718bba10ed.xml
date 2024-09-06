@@ -7,37 +7,66 @@
         <client_callable>false</client_callable>
         <description/>
         <name>ByteArrayOutputStream</name>
-        <script><![CDATA[/* global Class, Uint8Array, GlideRecord, GlideSysAttachment */
-/* global gs, x_376096_multipart */
+        <script><![CDATA[/* global gs, x_376096_multipart */
+/* global Class, ArrayBuffer, Uint8Array, GlideRecord, GlideSysAttachment */
 /* eslint no-undef: "error" */
 var ByteArrayOutputStream = Class.create();
 ByteArrayOutputStream.prototype = Object.extendsObject(x_376096_multipart.OutputStream, {
-	initialize: function(bytes) {
+	initialize: function(length) {
 		x_376096_multipart.OutputStream.prototype.initialize.call(this);
 
+		// ArrayBuffer resize is ES2023
+		// this._buffer = new ArrayBuffer(length || 32, {
+		// 	maxByteLength: +gs.getProperty('x_376096_multipart.file.max_size')
+		// });
+		// this._bytes = new Uint8Array(this._buffer);
+		// this._count = 0;
 		this._bytes = [];
+	},
 
-		if (bytes) {
-			for (let i = 0; i < bytes.length; i++) {
-				this._bytes.push(bytes[i]);
-			}
-		}
+	reset: function () {
+		// this._count = 0;
+	},
+
+	writeTo: function (os) {
+		os.writeBytes(this._bytes);
+		// os.write(this._bytes, 0, this._bytes.length);
 	},
 
 	writeByte: function(b) {
-		this._bytes.push(b);
+		this.writeBytes([b]);
+	},
+
+	writeBytes: function (bytes) {
+		// const requiredLength = this._count + bytes.length;
+		// if (this._bytes.length < requiredLength) {
+		// 	this._buffer.resize(requiredLength);
+		// }
+
+		// this._bytes.set(bytes, this._count);
+		// this._count += bytes.length;
+		this._bytes.push(...bytes);
+	},
+
+	unread: function (b) {
+		this.bytes.unshift(b);
+	},
+
+	unreadBytes: function (bytes) {
+		this.bytes.unshift(...bytes);
 	},
 
 	toByteArray: function() {
+		// return this._bytes.slice(0, this._count);
 		return new Uint8Array(this._bytes);
 	},
 
 	toString: function() {
-		return String.fromCharCode(...this._bytes);
+		return String.fromCharCode(...this.toByteArray());
 	},
 
 	toStringBase64: function() {
-		return base64ArrayBuffer(this._bytes);
+		return base64ArrayBuffer(this.toByteArray());
 
 		// https://gist.github.com/jonleighton/958841
 		function base64ArrayBuffer(arrayBuffer) {
@@ -99,13 +128,13 @@ ByteArrayOutputStream.prototype = Object.extendsObject(x_376096_multipart.Output
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:25:55</sys_created_on>
         <sys_id>93d9fba193738250e02873718bba10ed</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>16</sys_mod_count>
         <sys_name>ByteArrayOutputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_93d9fba193738250e02873718bba10ed</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-09-01 15:49:12</sys_updated_on>
+        <sys_updated_on>2024-09-06 17:05:19</sys_updated_on>
     </sys_script_include>
 </record_update>

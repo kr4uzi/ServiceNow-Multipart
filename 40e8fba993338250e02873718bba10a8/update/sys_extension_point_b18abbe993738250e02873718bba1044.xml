@@ -2,7 +2,8 @@
     <sys_extension_point action="INSERT_OR_UPDATE">
         <api_name>x_376096_multipart.StreamExt</api_name>
         <description/>
-        <example><![CDATA[/* global Class, Packages, GlideSysAttachmentInputStream, GlideRecord, gs, GlideSysAttachment */
+        <example><![CDATA[/* global Packages, gs, x_376096_multipart */
+/* global Class, GlideSysAttachmentInputStream, GlideRecord, GlideSysAttachment */
 /* eslint no-undef: "error" */
 var StreamExt = Class.create();
 StreamExt.prototype = {
@@ -26,26 +27,39 @@ StreamExt.prototype = {
 	},
 
 	/**
-	 * @param {GlideSysAttachmentInputStream|GlideScriptableInputStream} istream
+	 * @param {string|GlideSysAttachmentInputStream|GlideScriptableInputStream} istream
 	 * @return {Array.<number>} bytes
 	 */
 	streamToBytes: function (istream) {
-		var bstream = new Packages.java.io.ByteArrayOutputStream();
-		istream.writeTo(bstream);
+		var baos = new Packages.java.io.ByteArrayOutputStream();
+		var istreamClass = String(istream);
+		if (istreamClass.indexOf('SysAttachmentInputStream') != -1) {
+			istream.writeTo(baos);
+		} else if (istreamClass.indexOf('GlideScriptableInputStream') != -1) {
+			var dummyGr = new GlideRecord('sc_cart_item');
+			dummyGr.newRecord();
+			var gsa = new GlideSysAttachment();
+			var attSysID = gsa.writeContentStream(dummyGr, 'temp', 'application/octet-stream', istream);
+			new GlideSysAttachmentInputStream(attSysID).writeTo(baos);
+			gsa.deleteAttachment(attSysID);
+		} else {
+			new GlideSysAttachmentInputStream(istream).writeTo(baos);
+		}
 
 		// need to convert the Java ByteArray to a JavaScript array, other wise a glide fencing error
 		// will be thrown when this function used by a scoped app
-		var byteArray = bstream.toByteArray();				
-		var bytes = new Array(byteArray.length);
-		for (var i = 0; i < byteArray.length; i++) {
-			bytes.push(byteArray[i]);
+		var javaBytes = baos.toByteArray();
+		var jsBytes = new Array(javaBytes.length);
+		for (var i = 0; i < jsBytes.length; i++) {
+			var theByte = javaBytes[i];
+			jsBytes[i] = theByte < 0 ? theByte + 256 : theByte;
 		}
 
-		return bytes;
+		return jsBytes;
 	},
 
 	/**
-	 * @param {GlideRecordGenerated} appendGr - the record the attachment is attached to
+	 * @param {GlideRecordGenerated} appendGr - record to which to attach the attachment
 	 * @param {string} fileName
 	 * @param {string} contentType
 	 * @param {ArrayLike} bytes
@@ -72,13 +86,13 @@ StreamExt.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:29:18</sys_created_on>
         <sys_id>b18abbe993738250e02873718bba1044</sys_id>
-        <sys_mod_count>10</sys_mod_count>
+        <sys_mod_count>34</sys_mod_count>
         <sys_name>StreamExt</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_extension_point_b18abbe993738250e02873718bba1044</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-09-01 09:52:28</sys_updated_on>
+        <sys_updated_on>2024-09-06 14:01:25</sys_updated_on>
     </sys_extension_point>
 </record_update>

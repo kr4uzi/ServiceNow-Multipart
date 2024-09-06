@@ -7,7 +7,8 @@
         <client_callable>false</client_callable>
         <description>Implements extension point x_376096_multipart.StreamExt</description>
         <name>StreamExt</name>
-        <script><![CDATA[/* global Class,, GlideRecord, GlideScopedEvaluator */
+        <script><![CDATA[/* global x_376096_multipart */
+/* global Class, GlideRecord, GlideScopedEvaluator */
 /* eslint no-undef: "error" */
 var StreamExt = Class.create();
 StreamExt.prototype = {
@@ -30,14 +31,16 @@ StreamExt.prototype = {
 	 */
 	bufferedStream: function (istream, bufferSize) {
 		this.scriptGr.script = `
-			(function () {
-				return new function () {
-					var buffer = new Packages.java.io.BufferedInputStream(istream, bufferSize);
-					this.read = function() {
-						return buffer.read();
-					};
-				};
-			})();`;
+			(function (istream) {
+				var is = new x_376096_multipart.InputStream();
+				var stream = new Packages.java.io.BufferedInputStream(istream, bufferSize);
+				is.read = function () {
+					return stream.read();
+				}
+
+				// Note: all other read functions are blocked
+				return is;
+			})(istream);`;
 
 		const gse = new GlideScopedEvaluator();
 		gse.putVariable('istream', istream);
@@ -53,16 +56,31 @@ StreamExt.prototype = {
 	streamToBytes: function (istream) {
 		this.scriptGr.script = `
 			(function (istream) {
-				var bstream = new Packages.java.io.ByteArrayOutputStream();
-				istream.writeTo(bstream);
-
-				var byteArray = bstream.toByteArray();				
-				var bytes = new Array(byteArray.length);
-				for (var i = 0; i < byteArray.length; i++) {
-					bytes.push(byteArray[i]);
+				var baos = new Packages.java.io.ByteArrayOutputStream();
+				var istreamClass = String(istream);
+				if (istreamClass.indexOf('SysAttachmentInputStream') != -1) {
+					istream.writeTo(baos);
+				} else if (istreamClass.indexOf('GlideScriptableInputStream') != -1) {
+					var dummyGr = new GlideRecord('sc_cart_item');
+					dummyGr.newRecord();
+					var gsa = new GlideSysAttachment();
+					var attSysID = gsa.writeContentStream(dummyGr, 'temp', 'application/octet-stream', istream);
+					new GlideSysAttachmentInputStream(attSysID).writeTo(baos);
+					gsa.deleteAttachment(attSysID);
+				} else {
+					new GlideSysAttachmentInputStream(istream).writeTo(baos);
 				}
 
-				return bytes;
+				// need to convert the Java ByteArray to a JavaScript array, other wise a glide fencing error
+				// will be thrown when this function used by a scoped app
+				var javaBytes = baos.toByteArray();
+				var jsBytes = new Array(javaBytes.length);
+				for (var i = 0; i < jsBytes.length; i++) {
+					var theByte = javaBytes[i];
+					jsBytes[i] = theByte < 0 ? theByte + 256 : theByte;
+				}
+
+				return jsBytes;
 			})(istream);
 		`;
 
@@ -72,7 +90,7 @@ StreamExt.prototype = {
 	},
 
 	/**
-	 * @param {GlideRecordGenerated} appendGr - the record the attachment is attached to
+	 * @param {GlideRecordGenerated} appendGr - record to which to attach the attachment
 	 * @param {string} fileName
 	 * @param {string} contentType
 	 * @param {ArrayLike} bytes
@@ -84,9 +102,12 @@ StreamExt.prototype = {
 				var byteArray = Packages.java.lang.reflect.Array.newInstance(Packages.java.lang.Byte.TYPE, bytes.length);
 				for (var i = 0; i < bytes.length; i++) {
 					var theByte = bytes[i];
+					// unfortunately the byte conversion is not done automatically for us (byte is unsigned!)
+					// (and I haven't found a way to use native Java methods that work with rhino/NOW)
 					byteArray[i] = (theByte < 128) ? theByte : (theByte - 256);
 				}
 
+				// the global GlideSysAttachment.write method has a hidden compatibility for byte[] arguments
 				return new GlideSysAttachment().write(appendGr, fileName,  contentType, byteArray);
 			})();
 		`;
@@ -106,13 +127,13 @@ StreamExt.prototype = {
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:29:41</sys_created_on>
         <sys_id>75ca7fad93738250e02873718bba105f</sys_id>
-        <sys_mod_count>37</sys_mod_count>
+        <sys_mod_count>107</sys_mod_count>
         <sys_name>StreamExt</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_75ca7fad93738250e02873718bba105f</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-09-01 16:27:48</sys_updated_on>
+        <sys_updated_on>2024-09-06 17:19:34</sys_updated_on>
     </sys_script_include>
 </record_update>

@@ -52,7 +52,7 @@ AttachmentOutputStream.prototype = Object.extendsObject(x_376096_multipart.Outpu
 		//this._attSysID = this._gsa.writeBase64(fakeGr, this._fileName, this._contentType, this._bytes.toStringBase64());
 		this._attSysID = this._eps.saveBytesAsAttachment(fakeGr, this._fileName, this._contentType, this._bytes);
 		if (!this._attSysID) {
-			throw new Error('Failed to write to attachment');
+			throw new Error(`Failed to write to attachment filename=${this._fileName}, contentType=${this._contentType}, size=${this._bytes.length}`);
 		}
 	},
 
@@ -69,8 +69,13 @@ AttachmentOutputStream.prototype = Object.extendsObject(x_376096_multipart.Outpu
 	},
 
 	writeByte: function(b) {
-		this._bytes.push(b);
 		//this._bytes.writeByte(b);
+		this._bytes.push(b);
+	},
+
+	writeBytes: function (bytes) {
+		//this._bytes.writeBytes(bytes);
+		this._bytes.push(...bytes);
 	},
 
 	type: 'AttachmentOutputStream'
@@ -79,13 +84,13 @@ AttachmentOutputStream.prototype = Object.extendsObject(x_376096_multipart.Outpu
         <sys_created_by>markus.kraus</sys_created_by>
         <sys_created_on>2024-08-04 00:27:00</sys_created_on>
         <sys_id>871a3fe193738250e02873718bba100c</sys_id>
-        <sys_mod_count>4</sys_mod_count>
+        <sys_mod_count>10</sys_mod_count>
         <sys_name>AttachmentOutputStream</sys_name>
         <sys_package display_value="Multipart" source="x_376096_multipart">40e8fba993338250e02873718bba10a8</sys_package>
         <sys_policy/>
         <sys_scope display_value="Multipart">40e8fba993338250e02873718bba10a8</sys_scope>
         <sys_update_name>sys_script_include_871a3fe193738250e02873718bba100c</sys_update_name>
         <sys_updated_by>markus.kraus</sys_updated_by>
-        <sys_updated_on>2024-09-01 15:50:05</sys_updated_on>
+        <sys_updated_on>2024-09-06 17:12:20</sys_updated_on>
     </sys_script_include>
 </record_update>
